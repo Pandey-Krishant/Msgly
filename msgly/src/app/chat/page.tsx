@@ -2278,6 +2278,7 @@ export default function ChatPage() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -8 }}
               transition={{ duration: 0.2 }}
+              className="h-full flex flex-col min-h-0"
             >
               <div className="p-6">
                 <div className="flex items-center justify-between mb-4">

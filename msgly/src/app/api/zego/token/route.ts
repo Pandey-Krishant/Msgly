@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { ZegoUIKitPrebuilt } from "@zegocloud/zego-uikit-prebuilt";
 
 export async function POST(req: Request) {
   try {
@@ -15,6 +14,7 @@ export async function POST(req: Request) {
     if (!uid || !rid) {
       return NextResponse.json({ error: "Missing userId or roomId" }, { status: 400 });
     }
+    const { ZegoUIKitPrebuilt } = await import("@zegocloud/zego-uikit-prebuilt");
     const token = ZegoUIKitPrebuilt.generateKitTokenForTest(appID, serverSecret, rid, uid, uname);
     return NextResponse.json({ token });
   } catch (err) {
