@@ -229,6 +229,7 @@ export default function ChatPage() {
   const [callMinimized, setCallMinimized] = useState(false);
   const [incomingCall, setIncomingCall] = useState<any>(null);
   const [callStatus, setCallStatus] = useState<"idle" | "calling" | "ringing" | "active">("idle");
+  const callStatusRef = useRef<"idle" | "calling" | "ringing" | "active">("idle");
   const [callKind, setCallKind] = useState<"video" | "audio">("video");
   const [callPeer, setCallPeer] = useState<any>(null);
   const [remoteStreamTick, setRemoteStreamTick] = useState(0);
@@ -610,6 +611,10 @@ export default function ChatPage() {
   }, [remoteStreamTick, callKind]);
 
   useEffect(() => {
+    callStatusRef.current = callStatus;
+  }, [callStatus]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     if (!socket.connected) socket.connect();
     const onConnect = () => console.log("[socket] connected", socket.id, socketUrl);
@@ -683,7 +688,7 @@ export default function ChatPage() {
           showPreJoinView: false,
           onLeaveRoom: () => {
             const target = callPeerRef.current || selectedChat?.username;
-            if (target) {
+            if (target && callStatusRef.current === "active") {
               socket.emit("call:end", { to: target, from: myUniqueId });
             }
             closeZegoCall();
@@ -1244,8 +1249,6 @@ export default function ChatPage() {
     });
     socket.on("call:answer", async (data) => {
       if (data?.to !== myUniqueId || !data.answer) return;
-      const pc = getPeerConnection();
-      await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
       setCallStatus("active");
       callStartedAtRef.current = Date.now();
       stopRingtone();
@@ -1253,10 +1256,7 @@ export default function ChatPage() {
     });
     socket.on("call:ice", async (data) => {
       if (data?.to !== myUniqueId || !data.candidate) return;
-      const pc = getPeerConnection();
-      try {
-        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-      } catch {}
+      // WebRTC disabled for Zego flow.
     });
     socket.on("call:end", (data) => {
       if (data?.to !== myUniqueId) return;
@@ -2042,13 +2042,13 @@ export default function ChatPage() {
 
   return (
     <main
-      className="h-[100dvh] text-white overflow-hidden flex items-center justify-center md:p-6 transition-all duration-300"
+      className="min-h-[100dvh] text-white overflow-hidden flex items-start justify-center md:p-6 transition-all duration-300"
       style={{ background: activeTheme.bg, fontFamily: activeFont.stack }}
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(1200px_500px_at_20%_10%,rgba(0,168,255,0.15),transparent_60%)]" />
 
       <div
-        className="relative w-full h-full max-w-[1400px] max-h-[900px] backdrop-blur-2xl md:border border-white/10 md:rounded-[2.5rem] shadow-2xl flex overflow-hidden z-10 transition-all duration-300 min-h-0"
+        className="relative w-full h-[100dvh] md:h-[calc(100dvh-3rem)] max-w-[1400px] md:max-h-none backdrop-blur-2xl md:border border-white/10 md:rounded-[2.5rem] shadow-2xl flex overflow-hidden z-10 transition-all duration-300 min-h-0"
         style={{ background: activeTheme.panel }}
       >
         
