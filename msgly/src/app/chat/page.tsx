@@ -487,6 +487,22 @@ export default function ChatPage() {
     window.localStorage.setItem("msgly_font", fontId);
   }, [fontId]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!socket.connected) socket.connect();
+    const onConnect = () => console.log("[socket] connected", socket.id, socketUrl);
+    const onError = (err: any) => console.log("[socket] connect_error", err?.message || err);
+    const onDisconnect = (reason: any) => console.log("[socket] disconnected", reason);
+    socket.on("connect", onConnect);
+    socket.on("connect_error", onError);
+    socket.on("disconnect", onDisconnect);
+    return () => {
+      socket.off("connect", onConnect);
+      socket.off("connect_error", onError);
+      socket.off("disconnect", onDisconnect);
+    };
+  }, []);
+
   const logCall = useCallback(
     (entry: {
       user: string;
