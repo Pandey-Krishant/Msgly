@@ -232,6 +232,7 @@ export default function ChatPage() {
   const [callKind, setCallKind] = useState<"video" | "audio">("video");
   const [callPeer, setCallPeer] = useState<any>(null);
   const [remoteStreamTick, setRemoteStreamTick] = useState(0);
+  const iceServersRef = useRef<RTCIceServer[] | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -391,6 +392,30 @@ export default function ChatPage() {
       console.error(`${label} invalid JSON`, { status: res.status, text });
       return null;
     }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let active = true;
+    const loadTurn = async () => {
+      try {
+        const res = await fetch("/api/turn", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        const servers = Array.isArray(data?.iceServers)
+          ? data.iceServers
+          : Array.isArray(data)
+            ? data
+            : null;
+        if (active && servers && servers.length) {
+          iceServersRef.current = servers;
+        }
+      } catch {}
+    };
+    loadTurn();
+    return () => {
+      active = false;
+    };
   }, []);
 
   const fetchUserProfile = useCallback(async (username: string) => {
@@ -1543,25 +1568,32 @@ export default function ChatPage() {
 
   const getPeerConnection = () => {
     if (pcRef.current) return pcRef.current;
-    const iceServers: RTCIceServer[] = [
+    const defaultIceServers: RTCIceServer[] = [
       { urls: "stun:stun.l.google.com:19302" },
       { urls: "stun:stun1.l.google.com:19302" },
     ];
     const turnUrl = process.env.NEXT_PUBLIC_TURN_URL;
     const turnUser = process.env.NEXT_PUBLIC_TURN_USERNAME;
     const turnCred = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
-    const hasTurn = !!(turnUrl && turnUser && turnCred);
-    if (hasTurn) {
+    const envTurnServers: RTCIceServer[] = [];
+    if (turnUrl && turnUser && turnCred) {
       const turnUrls = turnUrl
         .split(",")
         .map((v) => v.trim())
         .filter(Boolean);
-      iceServers.push({
+      envTurnServers.push({
         urls: turnUrls.length > 0 ? turnUrls : turnUrl,
         username: turnUser,
         credential: turnCred,
       });
     }
+    const iceServers = iceServersRef.current?.length
+      ? iceServersRef.current
+      : [...defaultIceServers, ...envTurnServers];
+    const hasTurn = iceServers.some((s) => {
+      const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
+      return urls.some((u) => typeof u === "string" && (u.startsWith("turn:") || u.startsWith("turns:")));
+    });
     const pc = new RTCPeerConnection({
       iceServers,
       iceTransportPolicy: hasTurn ? "relay" : "all",
