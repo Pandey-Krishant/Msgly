@@ -1527,17 +1527,25 @@ export default function ChatPage() {
       });
     };
     pc.ontrack = (event) => {
-      const [stream] = event.streams;
+      const stream = event.streams?.[0];
       if (stream) {
         remoteStreamRef.current = stream;
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = stream;
-          remoteVideoRef.current.play().catch(() => {});
-        }
-        if (remoteAudioRef.current) {
-          remoteAudioRef.current.srcObject = stream;
-          remoteAudioRef.current.play().catch(() => {});
-        }
+      } else {
+        if (!remoteStreamRef.current) remoteStreamRef.current = new MediaStream();
+        remoteStreamRef.current.addTrack(event.track);
+      }
+      const activeStream = remoteStreamRef.current;
+      if (activeStream && remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = activeStream;
+        remoteVideoRef.current.muted = true;
+        remoteVideoRef.current.playsInline = true;
+        remoteVideoRef.current.play().catch(() => {});
+      }
+      if (activeStream && remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = activeStream;
+        remoteAudioRef.current.muted = false;
+        remoteAudioRef.current.volume = 1;
+        remoteAudioRef.current.play().catch(() => {});
       }
     };
     pc.oniceconnectionstatechange = () => {
@@ -1573,7 +1581,10 @@ export default function ChatPage() {
       throw err;
     }
     localStreamRef.current = stream;
-    if (kind === "video" && localVideoRef.current) localVideoRef.current.srcObject = stream;
+    if (kind === "video" && localVideoRef.current) {
+      localVideoRef.current.srcObject = stream;
+      localVideoRef.current.play().catch(() => {});
+    }
     return stream;
   };
 
@@ -2746,6 +2757,7 @@ export default function ChatPage() {
                       ref={remoteVideoRef}
                       autoPlay
                       playsInline
+                      muted
                       className="absolute inset-0 w-full h-full object-cover opacity-80"
                     />
                   )}
@@ -2830,7 +2842,7 @@ export default function ChatPage() {
                     </div>
                   )}
 
-                  {callKind === "audio" && <audio ref={remoteAudioRef} autoPlay />}
+                  <audio ref={remoteAudioRef} autoPlay playsInline />
                 </motion.div>
               </div>
             </motion.div>
