@@ -231,6 +231,7 @@ export default function ChatPage() {
   const [callStatus, setCallStatus] = useState<"idle" | "calling" | "ringing" | "active">("idle");
   const [callKind, setCallKind] = useState<"video" | "audio">("video");
   const [callPeer, setCallPeer] = useState<any>(null);
+  const [remoteStreamTick, setRemoteStreamTick] = useState(0);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -486,6 +487,23 @@ export default function ChatPage() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem("msgly_font", fontId);
   }, [fontId]);
+
+  useEffect(() => {
+    const stream = remoteStreamRef.current;
+    if (!stream) return;
+    if (callKind === "video" && remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = stream;
+      remoteVideoRef.current.muted = true;
+      remoteVideoRef.current.playsInline = true;
+      remoteVideoRef.current.play().catch(() => {});
+    }
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = stream;
+      remoteAudioRef.current.muted = false;
+      remoteAudioRef.current.volume = 1;
+      remoteAudioRef.current.play().catch(() => {});
+    }
+  }, [remoteStreamTick, callKind]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1503,7 +1521,8 @@ export default function ChatPage() {
     const turnUrl = process.env.NEXT_PUBLIC_TURN_URL;
     const turnUser = process.env.NEXT_PUBLIC_TURN_USERNAME;
     const turnCred = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
-    if (turnUrl && turnUser && turnCred) {
+    const hasTurn = !!(turnUrl && turnUser && turnCred);
+    if (hasTurn) {
       const turnUrls = turnUrl
         .split(",")
         .map((v) => v.trim())
@@ -1516,6 +1535,8 @@ export default function ChatPage() {
     }
     const pc = new RTCPeerConnection({
       iceServers,
+      iceTransportPolicy: hasTurn ? "relay" : "all",
+      bundlePolicy: "max-bundle",
     });
     pc.onicecandidate = (event) => {
       const target = callPeerRef.current || selectedChat?.username;
@@ -1547,6 +1568,7 @@ export default function ChatPage() {
         remoteAudioRef.current.volume = 1;
         remoteAudioRef.current.play().catch(() => {});
       }
+      setRemoteStreamTick((v) => v + 1);
     };
     pc.oniceconnectionstatechange = () => {
       console.log("[webrtc] ice", pc.iceConnectionState);
@@ -1567,7 +1589,11 @@ export default function ChatPage() {
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         video: kind === "video",
-        audio: true,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
       });
     } catch (err: any) {
       const name = err?.name || "MediaError";
