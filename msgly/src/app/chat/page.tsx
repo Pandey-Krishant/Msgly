@@ -240,6 +240,7 @@ export default function ChatPage() {
   const [zegoMinimized, setZegoMinimized] = useState(false);
   const zegoContainerRef = useRef<HTMLDivElement | null>(null);
   const zegoInstanceRef = useRef<any>(null);
+  const zegoJoiningRef = useRef(false);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -628,6 +629,8 @@ export default function ChatPage() {
     if (!zegoOpen || !zegoRoomId || typeof window === "undefined") return;
     let cancelled = false;
     const join = async () => {
+      if (zegoJoiningRef.current) return;
+      zegoJoiningRef.current = true;
       try {
         const appID = Number(String(process.env.NEXT_PUBLIC_ZEGO_APP_ID || "").trim());
         const serverSecret = String(process.env.NEXT_PUBLIC_ZEGO_SERVER_SECRET || "").trim();
@@ -636,6 +639,20 @@ export default function ChatPage() {
           closeZegoCall();
           return;
         }
+        if (zegoInstanceRef.current) {
+          try {
+            zegoInstanceRef.current.destroy?.();
+          } catch {}
+          zegoInstanceRef.current = null;
+        }
+        const waitForContainer = async () => {
+          for (let i = 0; i < 10; i += 1) {
+            if (zegoContainerRef.current) return;
+            await new Promise((r) => setTimeout(r, 50));
+          }
+          throw new Error("Zego container not ready");
+        };
+        await waitForContainer();
         const { ZegoUIKitPrebuilt } = await import("@zegocloud/zego-uikit-prebuilt");
         const token = ZegoUIKitPrebuilt.generateKitTokenForTest(
           appID,
@@ -675,6 +692,8 @@ export default function ChatPage() {
       } catch (err) {
         console.error("Zego join error", err);
         closeZegoCall();
+      } finally {
+        zegoJoiningRef.current = false;
       }
     };
     join();
@@ -3130,7 +3149,10 @@ export default function ChatPage() {
                   </div>
                 </>
               )}
-              <div ref={zegoContainerRef} className={`w-full h-full ${zegoMinimized ? "hidden" : ""}`} />
+              <div
+                ref={zegoContainerRef}
+                className={`w-full h-full transition-opacity ${zegoMinimized ? "opacity-0 pointer-events-none" : "opacity-100"}`}
+              />
               {zegoMinimized && (
                 <motion.div
                   drag
