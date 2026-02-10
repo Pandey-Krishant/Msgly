@@ -1609,13 +1609,26 @@ export default function ChatPage() {
         credential: turnCred,
       });
     }
-    const iceServers = iceServersRef.current?.length
+    const rawServers = iceServersRef.current?.length
       ? iceServersRef.current
       : [...defaultIceServers, ...envTurnServers];
-    const hasTurn = iceServers.some((s) => {
+    const hasTurn = rawServers.some((s) => {
       const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
       return urls.some((u) => typeof u === "string" && (u.startsWith("turn:") || u.startsWith("turns:")));
     });
+    const turnOnlyServers = rawServers
+      .map((s) => {
+        const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
+        const turnOnly = urls.filter((u) => typeof u === "string" && (u.startsWith("turn:") || u.startsWith("turns:")));
+        if (!turnOnly.length) return null;
+        const preferTcp = turnOnly.filter(
+          (u) => u.includes("transport=tcp") || u.startsWith("turns:") || u.includes(":443")
+        );
+        const finalUrls = preferTcp.length ? preferTcp : turnOnly;
+        return { ...s, urls: finalUrls };
+      })
+      .filter((v): v is RTCIceServer => Boolean(v));
+    const iceServers = hasTurn && turnOnlyServers.length ? turnOnlyServers : rawServers;
     const pc = new RTCPeerConnection({
       iceServers,
       iceTransportPolicy: hasTurn ? "relay" : "all",
@@ -1665,6 +1678,19 @@ export default function ChatPage() {
     pc.onconnectionstatechange = () => {
       console.log("[webrtc] connection", pc.connectionState);
     };
+    pc.addEventListener("iceconnectionstatechange", () => {
+      if (pc.iceConnectionState !== "failed") return;
+      console.warn("[webrtc] ICE failed -- retry with fresh TURN");
+      ensureIceServers(true).then(() => {
+        try {
+          const refreshed = iceServersRef.current;
+          if (refreshed?.length) {
+            pc.setConfiguration({ iceServers: refreshed, iceTransportPolicy: "relay", bundlePolicy: "max-bundle" });
+          }
+          if (pc.restartIce) pc.restartIce();
+        } catch {}
+      });
+    });
     pcRef.current = pc;
     return pc;
   };
