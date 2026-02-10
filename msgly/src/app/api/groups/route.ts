@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import clientPromise from "@/lib/db";
+import { ObjectId } from "mongodb";
 
 const groupId = () => `group_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -47,10 +48,10 @@ export async function POST(req: Request) {
     const client = await clientPromise;
     const db = client.db("msgly");
     const now = new Date();
-    const id = groupId();
+    const idObj = new ObjectId();
 
     await db.collection("groups").insertOne({
-      _id: id,
+      _id: idObj,
       name,
       description,
       members,
@@ -61,7 +62,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      group: { id, name, description, members, createdBy, createdAt: now, updatedAt: now },
+      group: { id: idObj.toHexString(), name, description, members, createdBy, createdAt: now, updatedAt: now },
     });
   } catch (error) {
     return NextResponse.json({ success: false, message: "Internal Error", error }, { status: 500 });
