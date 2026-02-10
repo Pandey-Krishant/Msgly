@@ -629,28 +629,27 @@ export default function ChatPage() {
     let cancelled = false;
     const join = async () => {
       try {
-        const res = await fetch("/api/zego/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: myUniqueId,
-            userName: myNickname || myUniqueId,
-            roomId: zegoRoomId,
-          }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data?.token || cancelled) {
-          console.error("Zego token error", { status: res.status, data });
-          alert(
-            data?.error
-              ? `Zego token error: ${data.error}`
-              : "Zego token error. Check ZEGO_APP_ID / ZEGO_SERVER_SECRET in Vercel."
-          );
+        const appID = Number(String(process.env.NEXT_PUBLIC_ZEGO_APP_ID || "").trim());
+        const serverSecret = String(process.env.NEXT_PUBLIC_ZEGO_SERVER_SECRET || "").trim();
+        if (!appID || !serverSecret) {
+          alert("Missing Zego client config. Set NEXT_PUBLIC_ZEGO_APP_ID and NEXT_PUBLIC_ZEGO_SERVER_SECRET.");
           closeZegoCall();
           return;
         }
         const { ZegoUIKitPrebuilt } = await import("@zegocloud/zego-uikit-prebuilt");
-        const zp = ZegoUIKitPrebuilt.create(data.token);
+        const token = ZegoUIKitPrebuilt.generateKitTokenForTest(
+          appID,
+          serverSecret,
+          zegoRoomId,
+          String(myUniqueId || "user"),
+          String(myNickname || myUniqueId || "user")
+        );
+        if (!token || cancelled) {
+          alert("Zego token error (client). Check Zego AppID/ServerSecret.");
+          closeZegoCall();
+          return;
+        }
+        const zp = ZegoUIKitPrebuilt.create(token);
         zegoInstanceRef.current = zp;
         const mode =
           zegoKind === "audio"
@@ -3094,27 +3093,42 @@ export default function ChatPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[9999] bg-black"
+              className="fixed inset-0 z-[9999] bg-gradient-to-br from-slate-900 via-slate-950 to-black"
             >
               {!zegoMinimized && (
-                <div className="absolute top-4 right-4 z-[10000] flex items-center gap-2">
-                  <button
-                    onClick={() => setZegoMinimized(true)}
-                    className="px-4 py-2 rounded-full bg-white/10 text-white text-xs font-semibold"
-                  >
-                    Minimize
-                  </button>
-                  <button
-                    onClick={() => {
-                      const target = callPeerRef.current || selectedChat?.username;
-                      if (target) socket.emit("call:end", { to: target, from: myUniqueId });
-                      closeZegoCall();
-                    }}
-                    className="px-4 py-2 rounded-full bg-red-500 text-white text-xs font-semibold"
-                  >
-                    End Call
-                  </button>
-                </div>
+                <>
+                  <div className="absolute top-4 left-4 z-[10000] flex items-center gap-3 rounded-2xl bg-white/10 px-4 py-3 backdrop-blur">
+                    <div className="h-10 w-10 rounded-full bg-white/15 grid place-items-center text-white font-semibold">
+                      {(callPeerRef.current || selectedChat?.username || "C").slice(0, 1).toUpperCase()}
+                    </div>
+                    <div className="text-white">
+                      <div className="text-sm font-semibold">
+                        {callPeerRef.current || selectedChat?.nickname || selectedChat?.username || "Call"}
+                      </div>
+                      <div className="text-[11px] text-white/60 uppercase tracking-wider">
+                        {zegoKind === "audio" ? "Audio Call" : "Video Call"}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="absolute top-4 right-4 z-[10000] flex items-center gap-2">
+                    <button
+                      onClick={() => setZegoMinimized(true)}
+                      className="px-4 py-2 rounded-full bg-white/10 text-white text-xs font-semibold"
+                    >
+                      Minimize
+                    </button>
+                    <button
+                      onClick={() => {
+                        const target = callPeerRef.current || selectedChat?.username;
+                        if (target) socket.emit("call:end", { to: target, from: myUniqueId });
+                        closeZegoCall();
+                      }}
+                      className="px-4 py-2 rounded-full bg-red-500 text-white text-xs font-semibold"
+                    >
+                      End Call
+                    </button>
+                  </div>
+                </>
               )}
               <div ref={zegoContainerRef} className={`w-full h-full ${zegoMinimized ? "hidden" : ""}`} />
               {zegoMinimized && (
