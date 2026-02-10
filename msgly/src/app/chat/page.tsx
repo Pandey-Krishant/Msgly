@@ -1617,7 +1617,7 @@ export default function ChatPage() {
       return urls.some((u) => typeof u === "string" && (u.startsWith("turn:") || u.startsWith("turns:")));
     });
     const turnOnlyServers = rawServers
-      .map((s) => {
+      .map((s): RTCIceServer | null => {
         const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
         const turnOnly = urls.filter((u) => typeof u === "string" && (u.startsWith("turn:") || u.startsWith("turns:")));
         if (!turnOnly.length) return null;
@@ -1627,7 +1627,7 @@ export default function ChatPage() {
         const finalUrls = preferTcp.length ? preferTcp : turnOnly;
         return { ...s, urls: finalUrls };
       })
-      .filter((v): v is RTCIceServer => Boolean(v));
+      .filter((v): v is RTCIceServer => v !== null);
     const iceServers = hasTurn && turnOnlyServers.length ? turnOnlyServers : rawServers;
     const pc = new RTCPeerConnection({
       iceServers,
