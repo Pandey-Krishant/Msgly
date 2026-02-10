@@ -237,6 +237,7 @@ export default function ChatPage() {
   const [zegoOpen, setZegoOpen] = useState(false);
   const [zegoRoomId, setZegoRoomId] = useState("");
   const [zegoKind, setZegoKind] = useState<"video" | "audio">("video");
+  const [zegoMinimized, setZegoMinimized] = useState(false);
   const zegoContainerRef = useRef<HTMLDivElement | null>(null);
   const zegoInstanceRef = useRef<any>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -638,7 +639,11 @@ export default function ChatPage() {
           }),
         });
         const data = await res.json();
-        if (!res.ok || !data?.token || cancelled) return;
+        if (!res.ok || !data?.token || cancelled) {
+          alert("Zego token error. Check ZEGO_APP_ID / ZEGO_SERVER_SECRET in Vercel.");
+          closeZegoCall();
+          return;
+        }
         const { ZegoUIKitPrebuilt } = await import("@zegocloud/zego-uikit-prebuilt");
         const zp = ZegoUIKitPrebuilt.create(data.token);
         zegoInstanceRef.current = zp;
@@ -3086,19 +3091,52 @@ export default function ChatPage() {
               exit={{ opacity: 0 }}
               className="fixed inset-0 z-[9999] bg-black"
             >
-              <div className="absolute top-4 right-4 z-[10000]">
-                <button
-                  onClick={() => {
-                    const target = callPeerRef.current || selectedChat?.username;
-                    if (target) socket.emit("call:end", { to: target, from: myUniqueId });
-                    closeZegoCall();
-                  }}
-                  className="px-4 py-2 rounded-full bg-red-500 text-white text-xs font-semibold"
+              {!zegoMinimized && (
+                <div className="absolute top-4 right-4 z-[10000] flex items-center gap-2">
+                  <button
+                    onClick={() => setZegoMinimized(true)}
+                    className="px-4 py-2 rounded-full bg-white/10 text-white text-xs font-semibold"
+                  >
+                    Minimize
+                  </button>
+                  <button
+                    onClick={() => {
+                      const target = callPeerRef.current || selectedChat?.username;
+                      if (target) socket.emit("call:end", { to: target, from: myUniqueId });
+                      closeZegoCall();
+                    }}
+                    className="px-4 py-2 rounded-full bg-red-500 text-white text-xs font-semibold"
+                  >
+                    End Call
+                  </button>
+                </div>
+              )}
+              <div ref={zegoContainerRef} className={`w-full h-full ${zegoMinimized ? "hidden" : ""}`} />
+              {zegoMinimized && (
+                <motion.div
+                  drag
+                  dragMomentum={false}
+                  className="absolute bottom-6 right-6 z-[10000] w-48 h-28 rounded-2xl overflow-hidden bg-black/80 border border-white/10 flex flex-col"
                 >
-                  End Call
-                </button>
-              </div>
-              <div ref={zegoContainerRef} className="w-full h-full" />
+                  <div className="flex items-center justify-between px-3 py-2 text-[10px] text-white/70 border-b border-white/10">
+                    <span>Call</span>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => setZegoMinimized(false)} className="text-white/80">Open</button>
+                      <button
+                        onClick={() => {
+                          const target = callPeerRef.current || selectedChat?.username;
+                          if (target) socket.emit("call:end", { to: target, from: myUniqueId });
+                          closeZegoCall();
+                        }}
+                        className="text-red-300"
+                      >
+                        End
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex-1 grid place-items-center text-white/50 text-xs">In call</div>
+                </motion.div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
