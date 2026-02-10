@@ -1,13 +1,20 @@
 import { Server } from "socket.io";
 
-const io = new Server(3001, {
+const port = process.env.PORT || 3001;
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:3000")
+  .split(",")
+  .map((v) => v.trim())
+  .filter(Boolean);
+
+const io = new Server(port, {
   cors: {
-    origin: "http://localhost:3000", // Tera Next.js app port
-    methods: ["GET", "POST"]
+    origin: allowedOrigins,
+    methods: ["GET", "POST"],
+    credentials: true,
   },
 });
 
-console.log("Socket Server (ES Module) running on port 3001... 🚀");
+console.log(`Socket Server (ES Module) running on port ${port}... 🚀`);
 
 io.on("connection", (socket) => {
   console.log("Bhai koi connect hua! ID:", socket.id);
