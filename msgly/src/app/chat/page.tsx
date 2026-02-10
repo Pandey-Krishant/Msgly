@@ -1504,7 +1504,15 @@ export default function ChatPage() {
     const turnUser = process.env.NEXT_PUBLIC_TURN_USERNAME;
     const turnCred = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
     if (turnUrl && turnUser && turnCred) {
-      iceServers.push({ urls: turnUrl, username: turnUser, credential: turnCred });
+      const turnUrls = turnUrl
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+      iceServers.push({
+        urls: turnUrls.length > 0 ? turnUrls : turnUrl,
+        username: turnUser,
+        credential: turnCred,
+      });
     }
     const pc = new RTCPeerConnection({
       iceServers,
