@@ -1002,8 +1002,10 @@ export default function ChatPage() {
       const peer = resolveCallPeer(data.from) || { username: data.from };
       callPeerRef.current = peer.username;
       setCallPeer(peer);
-      setIncomingCall({ from: data.from, offer: data.offer, kind: data.kind || "video" });
-      setCallOpen(true);
+      const incomingKind = data.kind || "video";
+      setCallKind(incomingKind);
+      setIncomingCall({ from: data.from, offer: data.offer, kind: incomingKind });
+      setCallOpen(false);
       setCallMinimized(false);
       setCallStatus("ringing");
       startRingtone("incoming");
@@ -1591,11 +1593,13 @@ export default function ChatPage() {
 
   const acceptCall = async () => {
     if (!incomingCall?.offer || !incomingCall?.from) return;
-    const kind: "video" | "audio" = incomingCall?.kind || "video";
+    const currentCall = incomingCall;
+    const kind: "video" | "audio" = currentCall?.kind || "video";
     setCallKind(kind);
     setCallOpen(true);
     setCallMinimized(false);
     setCallStatus("active");
+    setIncomingCall(null);
     callStartedAtRef.current = Date.now();
     stopRingtone();
     const pc = getPeerConnection();
@@ -1606,18 +1610,17 @@ export default function ChatPage() {
       endCall();
       return;
     }
-    await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+    await pc.setRemoteDescription(new RTCSessionDescription(currentCall.offer));
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     socket.emit("call:answer", {
-      to: incomingCall.from,
+      to: currentCall.from,
       from: myUniqueId,
       answer,
       kind,
     });
-    sendSystemMessage(incomingCall.from, `${myUniqueId} answered the call.`);
-    logCall({ user: incomingCall.from, kind, direction: "incoming", status: "answered" });
-    setIncomingCall(null);
+    sendSystemMessage(currentCall.from, `${myUniqueId} answered the call.`);
+    logCall({ user: currentCall.from, kind, direction: "incoming", status: "answered" });
   };
 
   const rejectCall = () => {
@@ -2585,6 +2588,76 @@ export default function ChatPage() {
             </div>
           )}
         </section>
+
+        {/* Incoming Call Popup */}
+        <AnimatePresence>
+          {incomingCall && callStatus === "ringing" && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-50 flex items-center justify-center"
+            >
+              <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+              <motion.div
+                initial={{ scale: 0.95, y: 10, opacity: 0 }}
+                animate={{ scale: 1, y: 0, opacity: 1 }}
+                exit={{ scale: 0.96, y: 6, opacity: 0 }}
+                className="relative w-[92%] max-w-md rounded-[2rem] border border-white/10 p-6 shadow-2xl"
+                style={{ background: activeTheme.panel }}
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-white/50">
+                    Trying To Call
+                  </p>
+                  <span className="text-xs text-white/60">
+                    {incomingCall.kind === "audio" ? "Audio" : "Video"}
+                  </span>
+                </div>
+
+                <div className="mt-5 flex items-center gap-4">
+                  {incomingAvatarUrl ? (
+                    <img
+                      src={incomingAvatarUrl}
+                      alt={incomingName}
+                      className="h-14 w-14 rounded-2xl object-cover border border-white/10"
+                    />
+                  ) : (
+                    <div className="h-14 w-14 rounded-2xl bg-white/10 border border-white/10 flex items-center justify-center text-lg font-semibold">
+                      {incomingInitial}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-lg font-semibold truncate">{incomingName}</p>
+                    <p className="text-[11px] text-white/50 truncate">{incomingId ? `@${incomingId}` : "Unknown ID"}</p>
+                  </div>
+                  <div className="h-10 w-10 rounded-full bg-white/10 border border-white/10 flex items-center justify-center text-white/80">
+                    {incomingCall.kind === "audio" ? <Phone size={16} /> : <VideoCall size={16} />}
+                  </div>
+                </div>
+
+                <p className="mt-4 text-xs text-white/50">
+                  Tap accept to start real-time audio/video, or reject to end the call.
+                </p>
+
+                <div className="mt-6 flex items-center gap-3">
+                  <button
+                    onClick={rejectCall}
+                    className="flex-1 px-5 py-2.5 rounded-full bg-red-500 hover:bg-red-600 text-white text-xs font-semibold shadow-lg"
+                  >
+                    Reject
+                  </button>
+                  <button
+                    onClick={acceptCall}
+                    className="flex-1 px-5 py-2.5 rounded-full bg-emerald-400 hover:bg-emerald-500 text-black text-xs font-semibold shadow-lg"
+                  >
+                    Accept
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Call Overlay */}
         <AnimatePresence>
