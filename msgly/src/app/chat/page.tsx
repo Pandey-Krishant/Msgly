@@ -234,6 +234,11 @@ export default function ChatPage() {
   const [remoteStreamTick, setRemoteStreamTick] = useState(0);
   const iceServersRef = useRef<RTCIceServer[] | null>(null);
   const turnFetchedAtRef = useRef<number | null>(null);
+  const [zegoOpen, setZegoOpen] = useState(false);
+  const [zegoRoomId, setZegoRoomId] = useState("");
+  const [zegoKind, setZegoKind] = useState<"video" | "audio">("video");
+  const zegoContainerRef = useRef<HTMLDivElement | null>(null);
+  const zegoInstanceRef = useRef<any>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -416,6 +421,40 @@ export default function ChatPage() {
     } catch {}
   }, []);
 
+  const getRoomId = useCallback(
+    (a?: string, b?: string, kind: "audio" | "video" = "video") => {
+      const one = (a || "").trim();
+      const two = (b || "").trim();
+      if (!one || !two) return "";
+      const pair = [one, two].sort().join("_");
+      return `call_${pair}_${kind}`;
+    },
+    []
+  );
+
+  const openZegoCall = useCallback(
+    async (kind: "audio" | "video", peerId: string) => {
+      const roomId = getRoomId(myUniqueId, peerId, kind);
+      if (!roomId) return;
+      setZegoKind(kind);
+      setZegoRoomId(roomId);
+      setZegoOpen(true);
+      setCallKind(kind);
+      setCallStatus("active");
+    },
+    [getRoomId, myUniqueId]
+  );
+
+  const closeZegoCall = useCallback(() => {
+    try {
+      zegoInstanceRef.current?.destroy?.();
+    } catch {}
+    zegoInstanceRef.current = null;
+    setZegoOpen(false);
+    setZegoRoomId("");
+    setCallStatus("idle");
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     let active = true;
@@ -583,6 +622,57 @@ export default function ChatPage() {
       socket.off("disconnect", onDisconnect);
     };
   }, []);
+
+  useEffect(() => {
+    if (!zegoOpen || !zegoRoomId || typeof window === "undefined") return;
+    let cancelled = false;
+    const join = async () => {
+      try {
+        const res = await fetch("/api/zego/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: myUniqueId,
+            userName: myNickname || myUniqueId,
+            roomId: zegoRoomId,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data?.token || cancelled) return;
+        const { ZegoUIKitPrebuilt } = await import("@zegocloud/zego-uikit-prebuilt");
+        const zp = ZegoUIKitPrebuilt.create(data.token);
+        zegoInstanceRef.current = zp;
+        const mode =
+          zegoKind === "audio"
+            ? ZegoUIKitPrebuilt.OneONoneCall
+            : ZegoUIKitPrebuilt.OneONoneCall;
+        zp.joinRoom({
+          container: zegoContainerRef.current,
+          scenario: { mode },
+          turnOnMicrophoneWhenJoining: true,
+          turnOnCameraWhenJoining: zegoKind === "video",
+          showScreenSharingButton: false,
+          showTextChat: false,
+          showUserList: false,
+          showPreJoinView: false,
+          onLeaveRoom: () => {
+            const target = callPeerRef.current || selectedChat?.username;
+            if (target) {
+              socket.emit("call:end", { to: target, from: myUniqueId });
+            }
+            closeZegoCall();
+          },
+        });
+      } catch (err) {
+        console.error("Zego join error", err);
+        closeZegoCall();
+      }
+    };
+    join();
+    return () => {
+      cancelled = true;
+    };
+  }, [zegoOpen, zegoRoomId, zegoKind, myUniqueId, myNickname, selectedChat, closeZegoCall]);
 
   const logCall = useCallback(
     (entry: {
@@ -1105,7 +1195,7 @@ export default function ChatPage() {
       setCallPeer(peer);
       const incomingKind = data.kind || "video";
       setCallKind(incomingKind);
-      setIncomingCall({ from: data.from, offer: data.offer, kind: incomingKind });
+      setIncomingCall({ from: data.from, offer: data.offer || null, kind: incomingKind });
       setCallOpen(false);
       setCallMinimized(false);
       setCallStatus("ringing");
@@ -1145,6 +1235,7 @@ export default function ChatPage() {
       const durationSec = callStartedAtRef.current
         ? Math.max(0, Math.round((Date.now() - callStartedAtRef.current) / 1000))
         : undefined;
+      closeZegoCall();
       endCall();
       if (data?.from) {
         logCall({ user: data.from, kind: callKind, direction: "incoming", status: "ended", durationSec });
@@ -1152,6 +1243,7 @@ export default function ChatPage() {
     });
     socket.on("call:reject", (data) => {
       if (data?.to !== myUniqueId) return;
+      closeZegoCall();
       endCall();
       if (data?.from) logCall({ user: data.from, kind: callKind, direction: "incoming", status: "rejected" });
     });
@@ -1761,7 +1853,7 @@ export default function ChatPage() {
     const target = targetUser || selectedChat?.username;
     if (!target) return;
     setCallKind(kind);
-    setCallOpen(true);
+    setCallOpen(false);
     setCallMinimized(false);
     setCallStatus("calling");
     let peer = resolveCallPeer(target) || (selectedChat?.username === target ? selectedChat : null) || { username: target };
@@ -1781,59 +1873,38 @@ export default function ChatPage() {
         });
       });
     }
-    await ensureIceServers(true);
-    const pc = getPeerConnection();
-    try {
-      const stream = await startLocalStream(kind);
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-    } catch {
-      endCall();
-      return;
-    }
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
     socket.emit("call:offer", {
       to: peer.username,
       from: myUniqueId,
-      offer,
+      offer: null,
       kind,
     });
     startRingtone("outgoing");
     logCall({ user: peer.username, kind, direction: "outgoing", status: "calling" });
     sendSystemMessage(peer.username, `${myUniqueId} is calling (${kind}).`);
+    await openZegoCall(kind, peer.username);
   };
 
   const acceptCall = async () => {
-    if (!incomingCall?.offer || !incomingCall?.from) return;
+    if (!incomingCall?.from) return;
     const currentCall = incomingCall;
     const kind: "video" | "audio" = currentCall?.kind || "video";
     setCallKind(kind);
-    setCallOpen(true);
+    setCallOpen(false);
     setCallMinimized(false);
     setCallStatus("active");
     setIncomingCall(null);
     callStartedAtRef.current = Date.now();
     stopRingtone();
-    await ensureIceServers(true);
-    const pc = getPeerConnection();
-    try {
-      const stream = await startLocalStream(kind);
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-    } catch {
-      endCall();
-      return;
-    }
-    await pc.setRemoteDescription(new RTCSessionDescription(currentCall.offer));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
     socket.emit("call:answer", {
       to: currentCall.from,
       from: myUniqueId,
-      answer,
+      answer: "ok",
       kind,
     });
     sendSystemMessage(currentCall.from, `${myUniqueId} answered the call.`);
     logCall({ user: currentCall.from, kind, direction: "incoming", status: "answered" });
+    await openZegoCall(kind, currentCall.from);
   };
 
   const rejectCall = () => {
@@ -3001,6 +3072,32 @@ export default function ChatPage() {
                   <audio ref={remoteAudioRef} autoPlay playsInline />
                 </motion.div>
               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Zego Call Overlay */}
+        <AnimatePresence>
+          {zegoOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9999] bg-black"
+            >
+              <div className="absolute top-4 right-4 z-[10000]">
+                <button
+                  onClick={() => {
+                    const target = callPeerRef.current || selectedChat?.username;
+                    if (target) socket.emit("call:end", { to: target, from: myUniqueId });
+                    closeZegoCall();
+                  }}
+                  className="px-4 py-2 rounded-full bg-red-500 text-white text-xs font-semibold"
+                >
+                  End Call
+                </button>
+              </div>
+              <div ref={zegoContainerRef} className="w-full h-full" />
             </motion.div>
           )}
         </AnimatePresence>
