@@ -327,7 +327,13 @@ export default function ChatPage() {
   const callAvatarUrl = callPeer?.image || selectedChat?.image || "";
   const callInitial = (activeCallName || "U").charAt(0).toUpperCase();
   const callStatusLabel =
-    callStatus === "calling" ? "Calling..." : callStatus === "active" ? "Connected" : "Live Call";
+    callStatus === "calling"
+      ? "Calling..."
+      : callStatus === "ringing"
+        ? "Incoming..."
+        : callStatus === "active"
+          ? "Connected"
+          : "Live Call";
   const formatDuration = (totalSeconds?: number) => {
     if (totalSeconds === undefined || totalSeconds === null) return "";
     const seconds = Math.max(0, Math.round(totalSeconds));
@@ -997,7 +1003,8 @@ export default function ChatPage() {
       callPeerRef.current = peer.username;
       setCallPeer(peer);
       setIncomingCall({ from: data.from, offer: data.offer, kind: data.kind || "video" });
-      setCallOpen(false);
+      setCallOpen(true);
+      setCallMinimized(false);
       setCallStatus("ringing");
       startRingtone("incoming");
       logCall({ user: peer.username, kind: data.kind || "video", direction: "incoming", status: "ringing" });
@@ -1619,9 +1626,7 @@ export default function ChatPage() {
       sendSystemMessage(incomingCall.from, `${myUniqueId} rejected the call.`);
       logCall({ user: incomingCall.from, kind: incomingCall.kind || "audio", direction: "incoming", status: "rejected" });
     }
-    stopRingtone();
-    setIncomingCall(null);
-    setCallStatus("idle");
+    endCall();
   };
 
   const handleSystemClick = (text: string) => {
@@ -2656,16 +2661,41 @@ export default function ChatPage() {
                       >
                         {callMinimized ? "Expand" : "Minimize"}
                       </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          endCallAndNotify();
-                        }}
-                        className="px-6 py-2.5 rounded-full bg-red-500 hover:bg-red-600 text-white text-xs font-semibold shadow-lg"
-                        aria-label="End call"
-                      >
-                        {callStatus === "calling" ? "Reject" : "End Call"}
-                      </button>
+                      {callStatus === "ringing" ? (
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              rejectCall();
+                            }}
+                            className="px-5 py-2.5 rounded-full bg-red-500 hover:bg-red-600 text-white text-xs font-semibold shadow-lg"
+                            aria-label="Reject call"
+                          >
+                            Reject
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              acceptCall();
+                            }}
+                            className="px-5 py-2.5 rounded-full bg-emerald-400 hover:bg-emerald-500 text-black text-xs font-semibold shadow-lg"
+                            aria-label="Accept call"
+                          >
+                            Accept
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            endCallAndNotify();
+                          }}
+                          className="px-6 py-2.5 rounded-full bg-red-500 hover:bg-red-600 text-white text-xs font-semibold shadow-lg"
+                          aria-label="End call"
+                        >
+                          {callStatus === "calling" ? "Reject" : "End Call"}
+                        </button>
+                      )}
                     </div>
                   </div>
 

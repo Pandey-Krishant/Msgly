@@ -21,7 +21,7 @@ export default function LoginPage() {
       alert("Access Denied, Bro! ❌");
       setLoading(false);
     } else {
-      router.push("/chat");
+      router.replace("/chat");
     }
   };
 
