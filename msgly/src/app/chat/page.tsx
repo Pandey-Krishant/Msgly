@@ -393,6 +393,22 @@ export default function ChatPage() {
     }
   }, []);
 
+  const fetchUserProfile = useCallback(async (username: string) => {
+    if (!username) return null;
+    try {
+      const res = await fetch(`/api/users/search?username=${encodeURIComponent(username)}`);
+      const data = await res.json();
+      if (data?.success && data.user) {
+        return {
+          username: data.user.uniqueUsername || username,
+          nickname: data.user.nickname || data.user.name || "",
+          image: data.user.image || "",
+        };
+      }
+    } catch {}
+    return null;
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mq = window.matchMedia("(max-width: 768px)");
@@ -1044,6 +1060,15 @@ export default function ChatPage() {
       setCallStatus("ringing");
       startRingtone("incoming");
       logCall({ user: peer.username, kind: data.kind || "video", direction: "incoming", status: "ringing" });
+      if (!peer.image) {
+        const fetched = await fetchUserProfile(peer.username);
+        if (fetched) {
+          setCallPeer((prev: any) => ({ ...prev, ...fetched }));
+          setChatList((prev) =>
+            prev.map((c) => (c.username === fetched.username ? { ...c, image: fetched.image || c.image } : c))
+          );
+        }
+      }
       if (!selectedChat || selectedChat.username !== data.from) {
         setSelectedChat(peer);
       }
@@ -1092,7 +1117,7 @@ export default function ChatPage() {
       socket.off("call:end");
       socket.off("call:reject");
     };
-  }, [selectedChat, myUniqueId, parseJsonSafe]);
+  }, [selectedChat, myUniqueId, parseJsonSafe, fetchUserProfile]);
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -1650,9 +1675,23 @@ export default function ChatPage() {
     setCallOpen(true);
     setCallMinimized(false);
     setCallStatus("calling");
-    const peer = resolveCallPeer(target) || { username: target };
+    let peer = resolveCallPeer(target) || (selectedChat?.username === target ? selectedChat : null) || { username: target };
     setCallPeer(peer);
     callPeerRef.current = peer.username;
+    if (!peer?.image) {
+      fetchUserProfile(peer.username).then((fetched) => {
+        if (!fetched) return;
+        setCallPeer((prev: any) => ({ ...prev, ...fetched }));
+        setChatList((prev) =>
+          prev.map((c) => (c.username === fetched.username ? { ...c, image: fetched.image || c.image } : c))
+        );
+        setSelectedChat((prev: any) => {
+          if (!prev || prev.username !== fetched.username) return prev;
+          if (prev.image && prev.image.length > 0) return prev;
+          return { ...prev, image: fetched.image || prev.image };
+        });
+      });
+    }
     const pc = getPeerConnection();
     try {
       const stream = await startLocalStream(kind);
@@ -3242,6 +3281,13 @@ export default function ChatPage() {
             aria-label="Settings"
           >
             <Settings size={18} />
+          </button>
+          <button
+            onClick={() => signOut()}
+            className="h-10 w-10 rounded-full flex items-center justify-center text-white/50 hover:text-white bg-white/5"
+            aria-label="Logout"
+          >
+            <LogOut size={18} />
           </button>
         </div>
       </div>
