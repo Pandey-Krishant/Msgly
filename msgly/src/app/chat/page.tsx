@@ -1496,11 +1496,18 @@ export default function ChatPage() {
 
   const getPeerConnection = () => {
     if (pcRef.current) return pcRef.current;
+    const iceServers: RTCIceServer[] = [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+    ];
+    const turnUrl = process.env.NEXT_PUBLIC_TURN_URL;
+    const turnUser = process.env.NEXT_PUBLIC_TURN_USERNAME;
+    const turnCred = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
+    if (turnUrl && turnUser && turnCred) {
+      iceServers.push({ urls: turnUrl, username: turnUser, credential: turnCred });
+    }
     const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun1.l.google.com:19302" },
-      ],
+      iceServers,
     });
     pc.onicecandidate = (event) => {
       const target = callPeerRef.current || selectedChat?.username;
@@ -1515,9 +1522,24 @@ export default function ChatPage() {
       const [stream] = event.streams;
       if (stream) {
         remoteStreamRef.current = stream;
-        if (remoteVideoRef.current) remoteVideoRef.current.srcObject = stream;
-        if (remoteAudioRef.current) remoteAudioRef.current.srcObject = stream;
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = stream;
+          remoteVideoRef.current.play().catch(() => {});
+        }
+        if (remoteAudioRef.current) {
+          remoteAudioRef.current.srcObject = stream;
+          remoteAudioRef.current.play().catch(() => {});
+        }
       }
+    };
+    pc.oniceconnectionstatechange = () => {
+      console.log("[webrtc] ice", pc.iceConnectionState);
+      if (pc.iceConnectionState === "failed") {
+        console.warn("[webrtc] ICE failed — TURN may be required");
+      }
+    };
+    pc.onconnectionstatechange = () => {
+      console.log("[webrtc] connection", pc.connectionState);
     };
     pcRef.current = pc;
     return pc;
