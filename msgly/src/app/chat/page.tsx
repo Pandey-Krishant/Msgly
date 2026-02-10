@@ -480,6 +480,14 @@ export default function ChatPage() {
     } catch (err) { console.error(err); }
   };
 
+  // Minimal theme/font so build doesn't fail
+  const activeTheme = {
+    bg: "linear-gradient(135deg, #0b0b0f 0%, #111827 55%, #0b1220 100%)",
+  };
+  const activeFont = {
+    stack: "var(--font-geist-sans), ui-sans-serif, system-ui",
+  };
+
   // --- JSX Rendering ---
   return (
     <div style={{ background: activeTheme.bg, fontFamily: activeFont.stack }} className="h-screen w-full flex text-white overflow-hidden">
