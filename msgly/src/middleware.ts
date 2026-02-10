@@ -7,11 +7,11 @@ export default auth((req) => {
   const { nextUrl } = req
 
   const isApiAuthRoute = nextUrl.pathname.startsWith("/api/auth")
-  const isPublicRoute = ["/", "/login", "/register"].includes(nextUrl.pathname)
+  const isPublicRoute = ["/", "/login", "/register", "/unauth"].includes(nextUrl.pathname)
 
   // Default welcome page for unauthenticated users
   if (!isLoggedIn && !isPublicRoute && !isApiAuthRoute) {
-    return NextResponse.redirect(new URL("/", nextUrl))
+    return NextResponse.redirect(new URL("/unauth", nextUrl))
   }
 
   return NextResponse.next()
