@@ -38,9 +38,10 @@ const Message = ({
   const menuRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!menuOpen) return;
-    const onDocClick = (e: MouseEvent) => {
+    const onDocClick = (e: Event) => {
       if (!menuRef.current) return;
-      if (menuRef.current.contains(e.target as Node)) return;
+      const target = e.target as Node | null;
+      if (target && menuRef.current.contains(target)) return;
       setMenuOpen(false);
     };
     document.addEventListener("mousedown", onDocClick);
@@ -396,16 +397,16 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!showAttachMenu) return;
-    const onDocClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
+    const onDocClick = (e: Event) => {
+      const target = e.target as HTMLElement | null;
       if (target?.closest?.("#attach-menu") || target?.closest?.("#attach-toggle")) return;
       setShowAttachMenu(false);
     };
-    document.addEventListener("mousedown", onDocClick);
-    document.addEventListener("touchstart", onDocClick);
+    document.addEventListener("mousedown", onDocClick as EventListener);
+    document.addEventListener("touchstart", onDocClick as EventListener);
     return () => {
-      document.removeEventListener("mousedown", onDocClick);
-      document.removeEventListener("touchstart", onDocClick);
+      document.removeEventListener("mousedown", onDocClick as EventListener);
+      document.removeEventListener("touchstart", onDocClick as EventListener);
     };
   }, [showAttachMenu]);
 
