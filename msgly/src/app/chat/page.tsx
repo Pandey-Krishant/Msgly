@@ -638,9 +638,14 @@ export default function ChatPage() {
             roomId: zegoRoomId,
           }),
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (!res.ok || !data?.token || cancelled) {
-          alert("Zego token error. Check ZEGO_APP_ID / ZEGO_SERVER_SECRET in Vercel.");
+          console.error("Zego token error", { status: res.status, data });
+          alert(
+            data?.error
+              ? `Zego token error: ${data.error}`
+              : "Zego token error. Check ZEGO_APP_ID / ZEGO_SERVER_SECRET in Vercel."
+          );
           closeZegoCall();
           return;
         }
