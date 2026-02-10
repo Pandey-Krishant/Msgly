@@ -1,0 +1,7 @@
+node_modules
+socketserver
+*.log
+.env
+.vercel
+.vscode
+.DS_Store
