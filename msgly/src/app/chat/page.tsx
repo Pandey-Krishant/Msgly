@@ -233,6 +233,7 @@ export default function ChatPage() {
   const [callPeer, setCallPeer] = useState<any>(null);
   const [remoteStreamTick, setRemoteStreamTick] = useState(0);
   const iceServersRef = useRef<RTCIceServer[] | null>(null);
+  const turnFetchedAtRef = useRef<number | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -394,8 +395,11 @@ export default function ChatPage() {
     }
   }, []);
 
-  const ensureIceServers = useCallback(async () => {
-    if (iceServersRef.current?.length) return;
+  const ensureIceServers = useCallback(async (force = false) => {
+    const now = Date.now();
+    if (!force && iceServersRef.current?.length && turnFetchedAtRef.current && now - turnFetchedAtRef.current < 60_000) {
+      return;
+    }
     try {
       const res = await fetch("/api/turn", { cache: "no-store" });
       if (!res.ok) return;
@@ -407,6 +411,7 @@ export default function ChatPage() {
           : null;
       if (servers && servers.length) {
         iceServersRef.current = servers;
+        turnFetchedAtRef.current = now;
       }
     } catch {}
   }, []);
@@ -1648,6 +1653,9 @@ export default function ChatPage() {
       }
       setRemoteStreamTick((v) => v + 1);
     };
+    pc.onicecandidateerror = (event: any) => {
+      console.warn("[webrtc] icecandidateerror", event?.errorText || event);
+    };
     pc.oniceconnectionstatechange = () => {
       console.log("[webrtc] ice", pc.iceConnectionState);
       if (pc.iceConnectionState === "failed") {
@@ -1719,6 +1727,8 @@ export default function ChatPage() {
       remoteStreamRef.current.getTracks().forEach((t) => t.stop());
       remoteStreamRef.current = null;
     }
+    iceServersRef.current = null;
+    turnFetchedAtRef.current = null;
   };
 
   const startCallTo = async (kind: "video" | "audio", targetUser?: string) => {
@@ -1745,7 +1755,7 @@ export default function ChatPage() {
         });
       });
     }
-    await ensureIceServers();
+    await ensureIceServers(true);
     const pc = getPeerConnection();
     try {
       const stream = await startLocalStream(kind);
@@ -1778,7 +1788,7 @@ export default function ChatPage() {
     setIncomingCall(null);
     callStartedAtRef.current = Date.now();
     stopRingtone();
-    await ensureIceServers();
+    await ensureIceServers(true);
     const pc = getPeerConnection();
     try {
       const stream = await startLocalStream(kind);
