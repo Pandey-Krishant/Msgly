@@ -1049,7 +1049,11 @@ export default function ChatPage() {
     });
     socket.on("call:offer", async (data) => {
       if (data?.to !== myUniqueId) return;
-      const peer = resolveCallPeer(data.from) || { username: data.from };
+      const peer = (resolveCallPeer(data.from) || { username: data.from }) as {
+        username: string;
+        nickname?: string;
+        image?: string;
+      };
       callPeerRef.current = peer.username;
       setCallPeer(peer);
       const incomingKind = data.kind || "video";
