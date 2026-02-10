@@ -35,7 +35,7 @@ export async function GET(req: Request) {
 
     const direct = await db.collection("users").findOne(
       { uniqueUsername: username },
-      { projection: { _id: 0, uniqueUsername: 1, nickname: 1 } }
+      { projection: { _id: 0, uniqueUsername: 1, nickname: 1, image: 1 } }
     );
 
     if (direct) {
@@ -44,6 +44,7 @@ export async function GET(req: Request) {
         user: {
           username: direct.uniqueUsername,
           nickname: direct.nickname,
+          image: direct.image || "",
         },
       });
     }
@@ -51,7 +52,7 @@ export async function GET(req: Request) {
     // Fallback for older users without uniqueUsername stored
     const users = await db
       .collection("users")
-      .find({}, { projection: { _id: 0, email: 1, nickname: 1, uniqueUsername: 1 } })
+      .find({}, { projection: { _id: 0, email: 1, nickname: 1, uniqueUsername: 1, image: 1 } })
       .limit(500)
       .toArray();
 
@@ -70,6 +71,7 @@ export async function GET(req: Request) {
       user: {
         username: match.uniqueUsername ?? generateUniqueUsername(match.email),
         nickname: match.nickname ?? getNickname(match.email),
+        image: match.image || "",
       },
     });
   } catch (error) {

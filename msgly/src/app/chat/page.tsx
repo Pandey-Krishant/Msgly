@@ -394,6 +394,23 @@ export default function ChatPage() {
     }
   }, []);
 
+  const ensureIceServers = useCallback(async () => {
+    if (iceServersRef.current?.length) return;
+    try {
+      const res = await fetch("/api/turn", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      const servers = Array.isArray(data?.iceServers)
+        ? data.iceServers
+        : Array.isArray(data)
+          ? data
+          : null;
+      if (servers && servers.length) {
+        iceServersRef.current = servers;
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     let active = true;
@@ -1728,6 +1745,7 @@ export default function ChatPage() {
         });
       });
     }
+    await ensureIceServers();
     const pc = getPeerConnection();
     try {
       const stream = await startLocalStream(kind);
@@ -1760,6 +1778,7 @@ export default function ChatPage() {
     setIncomingCall(null);
     callStartedAtRef.current = Date.now();
     stopRingtone();
+    await ensureIceServers();
     const pc = getPeerConnection();
     try {
       const stream = await startLocalStream(kind);
